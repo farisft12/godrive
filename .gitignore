@@ -1,0 +1,46 @@
+# Environment and secrets - never commit
+.env
+*.env.local
+Backend/.env
+Frontend/.env
+Frontend/.env.local
+Docker/.env
+
+# Dependencies
+node_modules/
+
+# Build outputs
+Frontend/dist
+Frontend/build
+Backend/dist
+
+# Storage and runtime (local dev)
+Backend/storage/
+storage/
+uploads/
+streams/
+temp/
+
+# Logs and debug
+*.log
+npm-debug.log*
+logs/
+
+# OS and editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/*.json
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Test and coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# k6 / load test artifacts (optional)
+Backend/load-test/results/
+*.jsonl

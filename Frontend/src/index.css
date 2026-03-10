@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Paksa tampilan terang/gelap pakai data-theme (agar toggle pasti jalan) */
+html[data-theme="light"],
+html:not(.dark) {
+  background-color: #f9fafb !important;
+}
+/* Fallback: data-theme="light" alone forces light even if .dark exists */
+html[data-theme="light"] {
+  background-color: #f9fafb !important;
+}
+html[data-theme="dark"],
+html.dark {
+  background-color: #111827 !important;
+}
+
+body {
+  @apply antialiased font-sans;
+}
+html[data-theme="light"] body,
+html:not(.dark) body {
+  background-color: #f9fafb !important;
+  color: #111827 !important;
+}
+html[data-theme="light"] body {
+  background-color: #f9fafb !important;
+  color: #111827 !important;
+}
+html[data-theme="dark"] body,
+html.dark body {
+  background-color: #111827 !important;
+  color: #f3f4f6 !important;
+}
+
+#root {
+  @apply min-h-screen;
+}
+
+/* Pastikan seluruh area ikut theme terang saat data-theme="light" */
+html[data-theme="light"] #root,
+html:not(.dark) #root {
+  background-color: #f9fafb !important;
+}
+html[data-theme="light"] #root {
+  background-color: #f9fafb !important;
+}
+html[data-theme="dark"] #root,
+html.dark #root {
+  background-color: #111827 !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+html[data-theme="light"] ::-webkit-scrollbar-track,
+html:not(.dark) ::-webkit-scrollbar-track {
+  background: #f3f4f6;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-track,
+html.dark ::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb,
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 9999px;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb,
+html.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 9999px;
+}
+html[data-theme="light"] ::-webkit-scrollbar-thumb:hover,
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover,
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
