@@ -74,8 +74,8 @@ async function createOrder(req, res, next) {
     const totalAfterTax = basePrice * 1.11;
     const discountPercent = Number(plan.discount_percent) || 0;
     const grandTotal = totalAfterTax * (1 - discountPercent / 100);
-    const uniqueCode = Math.floor(100 + Math.random() * 900); // 100-999
-    const amount = Math.round(grandTotal) + uniqueCode;
+    const uniqueCode = 0;
+    const amount = Math.round(grandTotal);
     const interval = isYearly ? 'yearly' : 'monthly';
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
