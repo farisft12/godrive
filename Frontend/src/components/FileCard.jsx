@@ -32,9 +32,9 @@ export default function FileCard({
   const toast = useToast();
 
   const API_BASE = import.meta.env.VITE_API_URL || '';
-  const canHaveThumb = isImage(file?.mime_type) || isVideo(file?.mime_type) || isPdf(file?.mime_type);
+  const canFetchThumb = isImage(file?.mime_type) || isVideo(file?.mime_type);
   useEffect(() => {
-    if (!file?.id || !canHaveThumb) return;
+    if (!file?.id || !canFetchThumb) return;
     const controller = new AbortController();
     const { signal } = controller;
     let objectUrl = null;
@@ -50,11 +50,12 @@ export default function FileCard({
 
     fetch(`${API_BASE}/api/files/${file.id}/thumbnail`, { headers, signal })
       .then((r) => {
-        if (!r.ok) throw new Error();
+        if (r.status === 204) return null;
         return r.blob();
       })
       .then((blob) => {
         if (signal.aborted) return;
+        if (!blob || blob.size === 0) return;
         objectUrl = URL.createObjectURL(blob);
         safeSetThumb(objectUrl);
       })
@@ -128,7 +129,7 @@ export default function FileCard({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       setThumbUrl(null);
     };
-  }, [file?.id, file?.mime_type, canHaveThumb]);
+  }, [file?.id, file?.mime_type, canFetchThumb]);
 
   const handleDownload = async () => {
     setLoading(true);

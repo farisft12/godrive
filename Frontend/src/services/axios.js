@@ -1,3 +1,5 @@
+/* @ts-nocheck */
+// @ts-nocheck
 import axios from 'axios';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -10,6 +12,9 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use((config) => {
   const token = localStorage.getItem('godrive_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 
@@ -25,6 +30,29 @@ axiosInstance.interceptors.response.use(
     return Promise.reject(err);
   }
 );
+
+/** Chunk upload URL: use VITE_API_URL when set; else in dev use hostname + VITE_BACKEND_PORT (default 3001). Ensures backend is reachable (avoid ERR_CONNECTION_REFUSED if backend runs on another port). */
+function getChunkUploadBaseUrl() {
+  if (API_BASE) return API_BASE;
+  if (import.meta.env.DEV && typeof window !== 'undefined') {
+    const port = import.meta.env.VITE_BACKEND_PORT || '3001';
+    return `${window.location.protocol}//${window.location.hostname}:${port}`;
+  }
+  return '';
+}
+
+function getChunkUploadClient() {
+  const base = getChunkUploadBaseUrl();
+  if (!base) return axiosInstance;
+  const client = axios.create({ baseURL: base, headers: { 'Content-Type': 'application/json' } });
+  client.interceptors.request.use((config) => {
+    const token = localStorage.getItem('godrive_token');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (config.data instanceof FormData) delete config.headers['Content-Type'];
+    return config;
+  });
+  return client;
+}
 
 export const authApi = {
   login: (email, password) =>
@@ -84,14 +112,89 @@ export const filesApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: onProgress,
     }).then((r) => r.data),
-  rename: (id, original_name) =>
-    axiosInstance.put(`/api/files/${id}/rename`, { original_name }).then((r) => r.data),
-  move: (id, folder_id) =>
-    axiosInstance.put(`/api/files/${id}/move`, { folder_id }).then((r) => r.data),
-  trash: (id) => axiosInstance.post(`/api/files/${id}/trash`).then((r) => r.data),
-  restore: (id) => axiosInstance.post(`/api/files/${id}/restore`).then((r) => r.data),
-  delete: (id) => axiosInstance.delete(`/api/files/${id}`),
-  download: async (id, filename) => {
+  // Chunked upload: init -> chunks -> complete. Params: file, folderId, onProgress, signal.
+  uploadChunked: async function (file, folderId, onProgress, signal) {
+    const totalSize = file.size;
+    const chunkClient = getChunkUploadClient();
+    const initRes = await chunkClient.post(
+      '/api/files/upload/init',
+      {
+        original_name: file.name,
+        mime_type: file.type || null,
+        total_size: totalSize,
+        folder_id: folderId || null,
+      },
+      { signal }
+    );
+    const { upload_id: uploadId, chunk_size: chunkSize } = initRes.data;
+    // When using Vite proxy (no VITE_API_URL), proxy limits body — use backend directly in dev via getChunkUploadClient(); else cap at 512 KB
+    const PROXY_SAFE_CHUNK = 512 * 1024;
+    const useDirectBackend = !!getChunkUploadBaseUrl();
+
+    // Multer's LIMIT_FILE_SIZE can still trigger when the client sends a chunk exactly at the limit.
+    // Keep a small safety margin below the server-provided limit.
+    const SAFETY_MARGIN = 64 * 1024; // 64 KB
+    const directMax = Math.max(256 * 1024, Math.min(chunkSize, 10 * 1024 * 1024) - SAFETY_MARGIN);
+    const effectiveChunkSize = useDirectBackend
+      ? directMax
+      : Math.min(chunkSize, PROXY_SAFE_CHUNK);
+
+    const numChunks = Math.ceil(totalSize / effectiveChunkSize);
+    let uploaded = 0;
+
+    for (let index = 0; index < numChunks; index++) {
+      const start = index * effectiveChunkSize;
+      const end = Math.min(start + effectiveChunkSize, totalSize);
+      const blob = file.slice(start, end);
+
+      const formData = new FormData();
+      formData.append('upload_id', uploadId);
+      formData.append('index', String(index));
+      formData.append('chunk', blob, file.name);
+
+      try {
+        await chunkClient.post('/api/files/upload/chunk', formData, {
+          signal,
+          timeout: 60000,
+          onUploadProgress: (e) => {
+            const chunkLoaded = e.loaded || 0;
+            const totalSoFar = index * effectiveChunkSize + chunkLoaded;
+            const percent = totalSize ? Math.min(99, Math.round((totalSoFar / totalSize) * 100)) : 0;
+            if (onProgress) onProgress(percent);
+          },
+        });
+      } catch (chunkErr) {
+        throw chunkErr;
+      }
+
+      uploaded += end - start;
+      if (onProgress) onProgress(totalSize ? Math.min(99, Math.round((uploaded / totalSize) * 100)) : 0);
+      // Small delay between chunks to avoid ERR_CONNECTION_RESET when hitting backend directly
+      if (index < numChunks - 1) {
+        await new Promise((r) => setTimeout(r, useDirectBackend ? 30 : 50));
+      }
+    }
+
+    const completeRes = await chunkClient.post('/api/files/upload/complete', { upload_id: uploadId }, { signal });
+    if (onProgress) onProgress(100);
+    return completeRes.data;
+  },
+  rename: function (id, original_name) {
+    return axiosInstance.put(`/api/files/${id}/rename`, { original_name }).then((r) => r.data);
+  },
+  move: function (id, folder_id) {
+    return axiosInstance.put(`/api/files/${id}/move`, { folder_id }).then((r) => r.data);
+  },
+  trash: function (id) {
+    return axiosInstance.post(`/api/files/${id}/trash`).then((r) => r.data);
+  },
+  restore: function (id) {
+    return axiosInstance.post(`/api/files/${id}/restore`).then((r) => r.data);
+  },
+  delete: function (id) {
+    return axiosInstance.delete(`/api/files/${id}`);
+  },
+  download: async function (id, filename) {
     const token = localStorage.getItem('godrive_token');
     const res = await fetch(`${API_BASE}/api/files/${id}/download`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

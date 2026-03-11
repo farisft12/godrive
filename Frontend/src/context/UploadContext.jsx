@@ -1,9 +1,14 @@
 import { createContext, useContext, useCallback, useRef, useState } from 'react';
 import axiosInstance from '../services/axios';
+import { filesApi } from '../services/axios';
 
 const UploadContext = createContext(null);
 
-let nextId = 1;
+const CHUNK_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10 MB: use chunked upload above this
+
+function makeUploadId() {
+  return `upload-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
 
 export function UploadProvider({ children }) {
   const [uploads, setUploads] = useState([]);
@@ -19,21 +24,30 @@ export function UploadProvider({ children }) {
     async (item) => {
       const controller = new AbortController();
       abortRef.current[item.id] = controller;
-      const formData = new FormData();
-      formData.append('file', item.file);
-      if (item.folderId) formData.append('folder_id', item.folderId);
+      const setProgress = (p) =>
+        setUploads((prev) => prev.map((u) => (u.id === item.id ? { ...u, progress: p } : u)));
 
       try {
-        await axiosInstance.post('/api/files/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (e) => {
-            const p = e.loaded && e.total ? Math.round((e.loaded / e.total) * 100) : 0;
-            setUploads((prev) =>
-              prev.map((u) => (u.id === item.id ? { ...u, progress: p } : u))
-            );
-          },
-          signal: controller.signal,
-        });
+        if (item.file.size > CHUNK_THRESHOLD_BYTES) {
+          await filesApi.uploadChunked(
+            item.file,
+            item.folderId || null,
+            setProgress,
+            controller.signal
+          );
+        } else {
+          const formData = new FormData();
+          formData.append('file', item.file);
+          if (item.folderId) formData.append('folder_id', item.folderId);
+          await axiosInstance.post('/api/files/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (e) => {
+              const p = e.loaded && e.total ? Math.round((e.loaded / e.total) * 100) : 0;
+              setProgress(p);
+            },
+            signal: controller.signal,
+          });
+        }
         setUploads((prev) =>
           prev.map((u) => (u.id === item.id ? { ...u, status: 'done', progress: 100 } : u))
         );
@@ -45,13 +59,24 @@ export function UploadProvider({ children }) {
             prev.map((u) => (u.id === item.id ? { ...u, status: 'paused' } : u))
           );
         } else {
-          setUploads((prev) =>
-            prev.map((u) =>
-              u.id === item.id
-                ? { ...u, status: 'error', error: err.response?.data?.error || err.message }
-                : u
-            )
-          );
+          const msg = err.response?.data?.error || err.message;
+          const limitMb = err.response?.data?.limit_mb;
+          const hint413 = limitMb != null ? ` Batas chunk: ${limitMb} MB. Set CHUNK_SIZE_MB=10 di Backend/.env lalu restart backend.` : '';
+          if (err.code === 'ERR_NETWORK' || (err.message && (err.message.includes('CONNECTION_RESET') || err.message.includes('CONNECTION_REFUSED') || err.message.includes('Network Error')))) {
+            const hint = 'Pastikan backend jalan (npm run dev di folder Backend) dan port sama dengan Frontend (.env: VITE_API_URL atau VITE_BACKEND_PORT).';
+            setUploads((prev) =>
+              prev.map((u) =>
+                u.id === item.id ? { ...u, status: 'error', error: `${msg}. ${hint}` } : u
+              )
+            );
+          } else {
+            if (err.response?.status === 500) console.error('[Upload] 500 from backend:', msg, err.response?.data);
+            setUploads((prev) =>
+              prev.map((u) =>
+                u.id === item.id ? { ...u, status: 'error', error: msg + hint413 } : u
+              )
+            );
+          }
         }
       } finally {
         delete abortRef.current[item.id];
@@ -64,7 +89,7 @@ export function UploadProvider({ children }) {
     (files, folderId = null) => {
       if (!files?.length) return;
       const newItems = Array.from(files).map((file) => ({
-        id: `upload-${nextId++}`,
+        id: makeUploadId(),
         file,
         folderId,
         progress: 0,

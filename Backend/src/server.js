@@ -5,6 +5,9 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 
 const server = app.listen(PORT, () => {
   console.log(`GoDrive API listening on port ${PORT}`);
+  const { getChunkLimitBytes } = require('./middleware/uploadMiddleware');
+  const chunkMb = getChunkLimitBytes() / (1024 * 1024);
+  console.log(`Chunk upload limit: ${chunkMb} MB (set CHUNK_SIZE_MB in .env to change)`);
 });
 
 if (process.env.RUN_WORKERS === 'true') {

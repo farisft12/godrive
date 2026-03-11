@@ -48,11 +48,30 @@ async function download(req, res, next) {
     res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
 
     if (process.env.FILE_ENCRYPTION_KEY) {
-      const buf = await storageService.readEncryptedFile(file.encrypted_path);
-      return res.send(buf);
+      try {
+        const buf = await storageService.readEncryptedFile(file.encrypted_path);
+        return res.send(buf);
+      } catch (readErr) {
+        if (readErr.code === 'ENOENT') {
+          return res.status(404).json({ error: 'File not found on storage' });
+        }
+        console.error('[fileController.download] readEncryptedFile:', readErr.message);
+        return res.status(500).json({ error: 'Failed to read file' });
+      }
     }
     const fullPath = path.join(UPLOADS, file.encrypted_path);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ error: 'File not found on storage' });
+    }
     const stream = fs.createReadStream(fullPath);
+    stream.on('error', (err) => {
+      if (err.code === 'ENOENT') {
+        if (!res.headersSent) res.status(404).json({ error: 'File not found on storage' });
+      } else if (!res.headersSent) {
+        console.error('[fileController.download] stream:', err.message);
+        res.status(500).json({ error: 'Failed to read file' });
+      }
+    });
     stream.pipe(res);
   } catch (err) {
     next(err);
@@ -67,24 +86,30 @@ async function thumbnail(req, res, next) {
     if (isImageMime(file.mime_type)) {
       res.setHeader('Content-Type', file.mime_type || 'image/jpeg');
       res.setHeader('Cache-Control', 'private, max-age=86400');
-      if (process.env.FILE_ENCRYPTION_KEY) {
-        const buf = await storageService.readEncryptedFile(file.encrypted_path);
-        return res.send(buf);
+      try {
+        if (process.env.FILE_ENCRYPTION_KEY) {
+          const buf = await storageService.readEncryptedFile(file.encrypted_path);
+          return res.send(buf);
+        }
+        const fullPath = path.join(UPLOADS, file.encrypted_path);
+        if (!fs.existsSync(fullPath)) return res.status(204).send();
+        const stream = fs.createReadStream(fullPath);
+        return stream.pipe(res);
+      } catch (imgErr) {
+        if (imgErr.code === 'ENOENT') return res.status(204).send();
+        throw imgErr;
       }
-      const fullPath = path.join(UPLOADS, file.encrypted_path);
-      const stream = fs.createReadStream(fullPath);
-      return stream.pipe(res);
     }
 
     if (isVideoMime(file.mime_type)) {
       const buf = await thumbnailService.getVideoThumbnailBuffer(file.encrypted_path, file.mime_type);
-      if (!buf) return res.status(404).json({ error: 'Thumbnail not available' });
+      if (!buf) return res.status(204).send();
       res.setHeader('Content-Type', 'image/jpeg');
       res.setHeader('Cache-Control', 'private, max-age=86400');
       return res.send(buf);
     }
 
-    return res.status(404).json({ error: 'Thumbnail not available' });
+    return res.status(204).send();
   } catch (err) {
     next(err);
   }

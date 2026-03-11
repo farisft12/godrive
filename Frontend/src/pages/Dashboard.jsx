@@ -36,6 +36,7 @@ export default function Dashboard() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [shareFile, setShareFile] = useState(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [uploadModalFiles, setUploadModalFiles] = useState([]);
   const [showShare, setShowShare] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
   const [renameItem, setRenameItem] = useState(null);
@@ -418,12 +419,17 @@ export default function Dashboard() {
 
       <UploadModal
         open={showUpload}
-        onClose={() => setShowUpload(false)}
+        onClose={() => {
+          setShowUpload(false);
+          setUploadModalFiles([]);
+        }}
         folderId={folderId || null}
         onUploaded={() => {
           refetchFiles();
           refreshUser?.();
         }}
+        initialFiles={uploadModalFiles}
+        onFilesChange={setUploadModalFiles}
       />
       <ShareModal
         open={showShare}

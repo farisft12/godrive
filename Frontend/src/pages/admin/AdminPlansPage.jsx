@@ -55,7 +55,12 @@ export default function AdminPlansPage() {
 
   const createMutation = useMutation({
     mutationFn: (data) => adminApi.createPlan(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (res?.plan) {
+        queryClient.setQueryData(['admin', 'plans'], (old) => ({
+          plans: [...(old?.plans ?? []), res.plan],
+        }));
+      }
       queryClient.invalidateQueries({ queryKey: ['admin', 'plans'] });
       setAddOpen(false);
       setForm({ name: '', storage_bytes: 1073741824, price_amount: 0, price_currency: 'IDR', price_yearly: '', discount_percent: 0 });

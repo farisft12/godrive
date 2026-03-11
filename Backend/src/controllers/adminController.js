@@ -215,17 +215,38 @@ async function listShares(req, res, next) {
   try {
     const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
     const offset = parseInt(req.query.offset, 10) || 0;
-    const { rows } = await pool.query(
-      `SELECT s.id, s.token, s.file_id, s.folder_id, s.expires_at, s.created_at,
-              u.name AS owner_name, u.email AS owner_email,
-              f.original_name AS file_name
-       FROM shares s
-       JOIN users u ON s.user_id = u.id
-       LEFT JOIN files f ON s.file_id = f.id
-       WHERE (s.expires_at IS NULL OR s.expires_at > NOW())
-       ORDER BY s.created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
-    );
+    let rows;
+    try {
+      const result = await pool.query(
+        `SELECT s.id, s.token, s.file_id, s.folder_id, s.expires_at, s.created_at,
+                u.name AS owner_name, u.email AS owner_email,
+                f.original_name AS file_name
+         FROM shares s
+         JOIN users u ON s.user_id = u.id
+         LEFT JOIN files f ON s.file_id = f.id
+         WHERE (s.expires_at IS NULL OR s.expires_at > NOW())
+         ORDER BY s.created_at DESC LIMIT $1 OFFSET $2`,
+        [limit, offset]
+      );
+      rows = result.rows;
+    } catch (queryErr) {
+      if (queryErr.code === '42703' && (queryErr.message || '').includes('folder_id')) {
+        const result = await pool.query(
+          `SELECT s.id, s.token, s.file_id, s.expires_at, s.created_at,
+                  u.name AS owner_name, u.email AS owner_email,
+                  f.original_name AS file_name
+           FROM shares s
+           JOIN users u ON s.user_id = u.id
+           LEFT JOIN files f ON s.file_id = f.id
+           WHERE (s.expires_at IS NULL OR s.expires_at > NOW())
+           ORDER BY s.created_at DESC LIMIT $1 OFFSET $2`,
+          [limit, offset]
+        );
+        rows = result.rows.map((r) => ({ ...r, folder_id: null }));
+      } else {
+        throw queryErr;
+      }
+    }
     const { rows: countRows } = await pool.query(
       'SELECT COUNT(*)::int AS c FROM shares WHERE (expires_at IS NULL OR expires_at > NOW())'
     );
@@ -286,14 +307,49 @@ async function getPlans(req, res, next) {
 
 async function fetchPlansFromDb() {
   try {
-    const { rows } = await pool.query(
-      `SELECT id, name, storage_bytes, price_amount, price_currency, sort_order,
-              COALESCE(billing_interval, 'monthly') AS billing_interval,
-              price_yearly, COALESCE(discount_percent, 0) AS discount_percent
-       FROM storage_plans
-       WHERE (deleted_at IS NULL)
-       ORDER BY sort_order ASC, storage_bytes ASC`
-    );
+    let rows;
+    try {
+      const result = await pool.query(
+        `SELECT id, name, storage_bytes, price_amount, price_currency, sort_order,
+                COALESCE(billing_interval, 'monthly') AS billing_interval,
+                price_yearly, COALESCE(discount_percent, 0) AS discount_percent
+         FROM storage_plans
+         WHERE (deleted_at IS NULL)
+         ORDER BY sort_order ASC, storage_bytes ASC`
+      );
+      rows = result.rows;
+    } catch (queryErr) {
+      if (queryErr.code === '42703' && (queryErr.message || '').includes('deleted_at')) {
+        try {
+          const result = await pool.query(
+            `SELECT id, name, storage_bytes, price_amount, price_currency, sort_order,
+                    COALESCE(billing_interval, 'monthly') AS billing_interval,
+                    price_yearly, COALESCE(discount_percent, 0) AS discount_percent
+             FROM storage_plans
+             ORDER BY sort_order ASC, storage_bytes ASC`
+          );
+          rows = result.rows;
+        } catch (noDeletedAtErr) {
+          if (noDeletedAtErr.code === '42703') {
+            const result = await pool.query(
+              `SELECT id, name, storage_bytes, price_amount, price_currency, sort_order
+               FROM storage_plans ORDER BY sort_order ASC, storage_bytes ASC`
+            );
+            rows = result.rows.map((r) => ({
+              ...r,
+              billing_interval: 'monthly',
+              price_yearly: null,
+              discount_percent: 0,
+            }));
+          } else {
+            throw noDeletedAtErr;
+          }
+        }
+      } else {
+        throw queryErr;
+      }
+    }
+
     return rows.map((r) => ({
       id: r.id,
       name: r.name,

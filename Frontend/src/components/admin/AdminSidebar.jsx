@@ -19,11 +19,11 @@ import { useLanguage } from '../../context/LanguageContext';
 
 const items = [
   { to: '/admin', icon: LayoutDashboard, labelKey: 'adminDashboard' },
+  { to: '/admin/logs', icon: FileText, labelKey: 'adminLogs' },
   { to: '/admin/users', icon: Users, labelKey: 'adminUsers' },
   { to: '/admin/storage', icon: HardDrive, labelKey: 'adminStorage' },
   { to: '/admin/files', icon: FolderOpen, labelKey: 'adminFiles' },
   { to: '/admin/shares', icon: Link2, labelKey: 'adminShares' },
-  { to: '/admin/logs', icon: FileText, labelKey: 'adminLogs' },
   { to: '/admin/server', icon: Server, labelKey: 'adminServer' },
   { to: '/admin/plans', icon: CreditCard, labelKey: 'adminPlans' },
   { to: '/admin/payments', icon: Wallet, labelKey: 'adminPayments' },

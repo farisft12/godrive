@@ -1,7 +1,7 @@
 const express = require('express');
 const fileController = require('../controllers/fileController');
 const uploadController = require('../controllers/uploadController');
-const { middlewareWithDynamicLimit } = require('../middleware/uploadMiddleware');
+const { middlewareWithDynamicLimit, uploadChunk } = require('../middleware/uploadMiddleware');
 const { body } = require('express-validator');
 const { validationResult } = require('express-validator');
 const { authMiddleware } = require('../middleware/authMiddleware');
@@ -12,6 +12,13 @@ const router = express.Router();
 router.use(authMiddleware);
 router.use(apiLimiter);
 
+router.post('/upload/init', uploadController.initChunked);
+router.post('/upload/chunk', (req, res, next) => {
+  req.setTimeout(120000);
+  res.setTimeout(120000);
+  next();
+}, uploadChunk, uploadController.uploadChunk);
+router.post('/upload/complete', uploadController.completeChunked);
 router.post('/upload', middlewareWithDynamicLimit('file'), uploadController.upload);
 
 router.get('/', fileController.list);

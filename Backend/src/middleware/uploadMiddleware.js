@@ -5,6 +5,33 @@ const { TEMP, PAYMENT_PROOFS, ensureDirs } = require('../config/storage');
 
 ensureDirs();
 
+// Chunk size for chunked uploads (MB). Minimum 1 so Multer always accepts at least 1 MB per chunk.
+const _rawChunkMb = parseInt(process.env.CHUNK_SIZE_MB || '1', 10);
+const CHUNK_SIZE_MB = Number.isFinite(_rawChunkMb) && _rawChunkMb >= 1 ? _rawChunkMb : 1;
+const CHUNK_SIZE_BYTES = CHUNK_SIZE_MB * 1024 * 1024;
+
+/** Per-request chunk limit so env changes (e.g. after restart) are used. Use this for chunk upload middleware. */
+function getChunkLimitBytes() {
+  const raw = parseInt(process.env.CHUNK_SIZE_MB || '1', 10);
+  const mb = Number.isFinite(raw) && raw >= 1 ? raw : 1;
+  return mb * 1024 * 1024;
+}
+
+/** Chunk upload: memory storage, single file field "chunk", limit from getChunkLimitBytes() per request */
+function createChunkUploadMiddleware() {
+  return (req, res, next) => {
+    const limitBytes = getChunkLimitBytes();
+    const m = multer({
+      storage: multer.memoryStorage(),
+      limits: { fileSize: limitBytes },
+      fileFilter,
+    });
+    m.single('chunk')(req, res, next);
+  };
+}
+
+const uploadChunk = createChunkUploadMiddleware();
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, TEMP);
@@ -83,4 +110,4 @@ function middlewareWithDynamicLimit(fieldName = 'file') {
   };
 }
 
-module.exports = { upload, uploadSingle, uploadPaymentProof, uploadSingleDynamic, middlewareWithDynamicLimit };
+module.exports = { upload, uploadSingle, uploadPaymentProof, uploadChunk, uploadSingleDynamic, middlewareWithDynamicLimit, CHUNK_SIZE_MB, CHUNK_SIZE_BYTES, getChunkLimitBytes };
