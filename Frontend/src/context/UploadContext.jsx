@@ -4,7 +4,7 @@ import { filesApi } from '../services/axios';
 
 const UploadContext = createContext(null);
 
-const CHUNK_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10 MB: use chunked upload above this
+const CHUNK_THRESHOLD_BYTES = 80 * 1024 * 1024; // 80 MB: use chunked upload above this
 
 function makeUploadId() {
   return `upload-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -28,14 +28,7 @@ export function UploadProvider({ children }) {
         setUploads((prev) => prev.map((u) => (u.id === item.id ? { ...u, progress: p } : u)));
 
       try {
-        if (item.file.size > CHUNK_THRESHOLD_BYTES) {
-          await filesApi.uploadChunked(
-            item.file,
-            item.folderId || null,
-            setProgress,
-            controller.signal
-          );
-        } else {
+        if (item.file.size < CHUNK_THRESHOLD_BYTES) {
           const formData = new FormData();
           formData.append('file', item.file);
           if (item.folderId) formData.append('folder_id', item.folderId);
@@ -47,6 +40,8 @@ export function UploadProvider({ children }) {
             },
             signal: controller.signal,
           });
+        } else {
+          await filesApi.uploadChunked(item.file, item.folderId || null, setProgress, controller.signal);
         }
         setUploads((prev) =>
           prev.map((u) => (u.id === item.id ? { ...u, status: 'done', progress: 100 } : u))

@@ -17,12 +17,16 @@ function getChunkLimitBytes() {
   return mb * 1024 * 1024;
 }
 
-/** Chunk upload: memory storage, single file field "chunk", limit from getChunkLimitBytes() per request */
+/** Chunk upload: disk storage, single file field "chunk", limit from getChunkLimitBytes() per request */
 function createChunkUploadMiddleware() {
   return (req, res, next) => {
     const limitBytes = getChunkLimitBytes();
+    const chunkTempStorage = multer.diskStorage({
+      destination: (req, file, cb) => cb(null, TEMP),
+      filename: (req, file, cb) => cb(null, `chunk_${uuidv4()}`),
+    });
     const m = multer({
-      storage: multer.memoryStorage(),
+      storage: chunkTempStorage,
       limits: { fileSize: limitBytes },
       fileFilter,
     });

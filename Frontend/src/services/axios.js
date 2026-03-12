@@ -114,6 +114,9 @@ export const filesApi = {
     }).then((r) => r.data),
   // Chunked upload: init -> chunks -> complete. Params: file, folderId, onProgress, signal.
   uploadChunked: async function (file, folderId, onProgress, signal) {
+    // #region agent log
+    fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'start chunk upload',data:{fileSize:file?.size,fileName:file?.name,folderId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     const totalSize = file.size;
     const chunkClient = getChunkUploadClient();
     const initRes = await chunkClient.post(
@@ -127,6 +130,9 @@ export const filesApi = {
       { signal }
     );
     const { upload_id: uploadId, chunk_size: chunkSize } = initRes.data;
+    // #region agent log
+    fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'init response',data:{uploadId,chunkSize},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     // When using Vite proxy (no VITE_API_URL), proxy limits body — use backend directly in dev via getChunkUploadClient(); else cap at 512 KB
     const PROXY_SAFE_CHUNK = 512 * 1024;
     const useDirectBackend = !!getChunkUploadBaseUrl();
@@ -134,7 +140,8 @@ export const filesApi = {
     // Multer's LIMIT_FILE_SIZE can still trigger when the client sends a chunk exactly at the limit.
     // Keep a small safety margin below the server-provided limit.
     const SAFETY_MARGIN = 64 * 1024; // 64 KB
-    const directMax = Math.max(256 * 1024, Math.min(chunkSize, 10 * 1024 * 1024) - SAFETY_MARGIN);
+    const PREFERRED_CHUNK = 100 * 1024 * 1024; // 100 MB per requirement
+    const directMax = Math.max(256 * 1024, Math.min(chunkSize, PREFERRED_CHUNK) - SAFETY_MARGIN);
     const effectiveChunkSize = useDirectBackend
       ? directMax
       : Math.min(chunkSize, PROXY_SAFE_CHUNK);
@@ -143,6 +150,7 @@ export const filesApi = {
     let uploaded = 0;
 
     for (let index = 0; index < numChunks; index++) {
+      const t0 = Date.now();
       const start = index * effectiveChunkSize;
       const end = Math.min(start + effectiveChunkSize, totalSize);
       const blob = file.slice(start, end);
@@ -166,13 +174,12 @@ export const filesApi = {
       } catch (chunkErr) {
         throw chunkErr;
       }
+      // #region agent log
+      fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'chunk uploaded',data:{index,chunkBytes:end-start,ms:Date.now()-t0},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
 
       uploaded += end - start;
       if (onProgress) onProgress(totalSize ? Math.min(99, Math.round((uploaded / totalSize) * 100)) : 0);
-      // Small delay between chunks to avoid ERR_CONNECTION_RESET when hitting backend directly
-      if (index < numChunks - 1) {
-        await new Promise((r) => setTimeout(r, useDirectBackend ? 30 : 50));
-      }
     }
 
     const completeRes = await chunkClient.post('/api/files/upload/complete', { upload_id: uploadId }, { signal });

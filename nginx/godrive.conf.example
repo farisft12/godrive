@@ -1,0 +1,56 @@
+server {
+  listen 80;
+  server_name your-domain.com;
+
+  # If using HTTPS, move these into the SSL server block and enable http2 there.
+  # listen 443 ssl http2;
+
+  # Chunk target 100MB: allow a bit more for multipart overhead.
+  client_max_body_size 110m;
+
+  # Large uploads can take time.
+  proxy_read_timeout 600s;
+  proxy_send_timeout 600s;
+  send_timeout 600s;
+
+  # Keep connections warm
+  keepalive_timeout 65;
+
+  location / {
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Your upstream app (backend) address:
+    proxy_pass http://YOUR_BACKEND_HOST:3001;
+  }
+
+  # Upload endpoints: stream request body to upstream (avoid buffering full body on VPS disk).
+  location ~ ^/api/files/upload/(init|chunk|complete)$ {
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_request_buffering off;
+    proxy_buffering off;
+
+    proxy_pass http://YOUR_BACKEND_HOST:3001;
+  }
+
+  # Download endpoints: you can keep buffering on (default) for better throughput,
+  # but if you see issues with very large downloads, you can disable proxy_buffering here too.
+  location ~ ^/api/files/.*?/download$ {
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    proxy_pass http://YOUR_BACKEND_HOST:3001;
+  }
+}
+

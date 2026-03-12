@@ -13,8 +13,9 @@ const CHUNK_UPLOAD_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
 const BODY_FILENAME = 'body';
 const META_FILENAME = 'meta.json';
 const CHUNK_LOCK_FILENAME = '.chunk.lock';
-const CHUNK_LOCK_RETRIES = 200;
+const CHUNK_LOCK_RETRIES = 1200; // ~30s max wait (1200 * 25ms)
 const CHUNK_LOCK_WAIT_MS = 25;
+const CHUNK_LOCK_STALE_MS = 2 * 60 * 1000; // 2 minutes
 
 // Serialize chunk writes per uploadId (in-process).
 const _uploadLocks = new Map();
@@ -40,6 +41,26 @@ async function withChunkFileLock(dirPath, fn) {
       break;
     } catch (e) {
       if (e.code !== 'EEXIST') throw e;
+      // If lock file is stale (e.g., previous process crashed), remove it and retry immediately.
+      try {
+        const st = await fs.stat(lockPath).catch(() => null);
+        if (st && Date.now() - st.mtimeMs > CHUNK_LOCK_STALE_MS) {
+          await fs.unlink(lockPath).catch(() => {});
+          require('fs').appendFileSync(
+            path.join(process.cwd(), 'debug-eb84bb.log'),
+            JSON.stringify({
+              sessionId: 'eb84bb',
+              runId: 'pre-fix',
+              hypothesisId: 'V3',
+              location: 'uploadController.js:withChunkFileLock',
+              message: 'removed stale lock',
+              data: { lockAgeMs: Date.now() - st.mtimeMs, dirPath },
+              timestamp: Date.now(),
+            }) + '\n'
+          );
+          continue;
+        }
+      } catch (_) {}
       if (i === CHUNK_LOCK_RETRIES - 1) throw new Error('Chunk upload lock timeout');
       await new Promise((r) => setTimeout(r, CHUNK_LOCK_WAIT_MS));
     }
@@ -156,7 +177,7 @@ async function initChunked(req, res, next) {
 
 async function uploadChunk(req, res, next) {
   try {
-    if (!req.file || !req.file.buffer) {
+    if (!req.file || (!req.file.buffer && !req.file.path)) {
       return res.status(400).json({ error: 'No chunk uploaded' });
     }
 
@@ -173,6 +194,12 @@ async function uploadChunk(req, res, next) {
     await withUploadLock(uploadId, async () => {
       const dirPath = path.join(CHUNK_UPLOADS, uploadId);
       await withChunkFileLock(dirPath, async () => {
+        const chunkPath = req.file.path || null;
+        const chunkSize = req.file.size || (req.file.buffer ? req.file.buffer.length : 0);
+        // #region agent log
+        require('fs').appendFileSync(path.join(process.cwd(), 'debug-eb84bb.log'), JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V2',location:'uploadController.js:uploadChunk',message:'chunk received',data:{uploadId,index,chunkSize,hasPath:!!chunkPath,hasBuffer:!!req.file.buffer},timestamp:Date.now()})+'\n');
+        // #endregion
+
         const metaPath = path.join(dirPath, META_FILENAME);
         let metaRaw;
         try {
@@ -204,10 +231,23 @@ async function uploadChunk(req, res, next) {
         }
 
         const bodyPath = path.join(dirPath, BODY_FILENAME);
-        await fs.appendFile(bodyPath, req.file.buffer);
+        if (req.file.buffer) {
+          await fs.appendFile(bodyPath, req.file.buffer);
+        } else if (chunkPath) {
+          const fsSync = require('fs');
+          await new Promise((resolve, reject) => {
+            const rs = fsSync.createReadStream(chunkPath);
+            const ws = fsSync.createWriteStream(bodyPath, { flags: 'a' });
+            rs.on('error', reject);
+            ws.on('error', reject);
+            ws.on('close', resolve);
+            rs.pipe(ws);
+          });
+          await fs.unlink(chunkPath).catch(() => {});
+        }
 
         meta.nextIndex += 1;
-        meta.receivedSize = (meta.receivedSize || 0) + req.file.buffer.length;
+        meta.receivedSize = (meta.receivedSize || 0) + chunkSize;
         await fs.writeFile(metaPath, JSON.stringify(meta));
         res.status(200).json({ received: meta.receivedSize });
       });
