@@ -410,6 +410,13 @@ async function updatePlan(req, res, next) {
     );
     if (!rows[0]) return res.status(404).json({ error: 'Plan not found' });
     const r = rows[0];
+    await Activity.log({
+      userId: req.user.id,
+      action: 'admin_plan_update',
+      resourceType: 'storage_plan',
+      resourceId: r.id,
+      details: req.body || {},
+    });
     res.json({
       plan: {
         id: r.id,
@@ -448,6 +455,13 @@ async function createPlan(req, res, next) {
       ]
     );
     const r = rows[0];
+    await Activity.log({
+      userId: req.user.id,
+      action: 'admin_plan_create',
+      resourceType: 'storage_plan',
+      resourceId: r.id,
+      details: req.body || {},
+    });
     res.status(201).json({
       plan: {
         id: r.id,
@@ -474,6 +488,13 @@ async function deletePlan(req, res, next) {
       [id]
     );
     if (!rows[0]) return res.status(404).json({ error: 'Plan not found' });
+    await Activity.log({
+      userId: req.user.id,
+      action: 'admin_plan_delete',
+      resourceType: 'storage_plan',
+      resourceId: rows[0].id,
+      details: {},
+    });
     res.status(204).send();
   } catch (err) {
     next(err);
@@ -484,6 +505,7 @@ async function getSettings(req, res, next) {
   try {
     const settingsHelper = require('../utils/settingsHelper');
     const maxUploadMb = (await settingsHelper.getSetting('max_upload_mb')) || process.env.MAX_UPLOAD_MB || 500;
+    const trashRetentionDays = (await settingsHelper.getSetting('trash_retention_days')) || process.env.TRASH_RETENTION_DAYS || 30;
     const paymentEnabled = (await settingsHelper.getSetting('payment_enabled'));
     const paymentGateway = (await settingsHelper.getSetting('payment_gateway')) || 'manual';
     const paymentInstructions = (await settingsHelper.getSetting('payment_instructions')) || '';
@@ -494,6 +516,7 @@ async function getSettings(req, res, next) {
     res.json({
       max_upload_mb: parseInt(String(maxUploadMb), 10) || 500,
       default_storage_bytes: 1073741824,
+      trash_retention_days: parseInt(String(trashRetentionDays), 10) || 30,
       payment_enabled: paymentEnabled !== 'false' && paymentEnabled !== '0',
       payment_gateway: paymentGateway,
       payment_instructions: paymentInstructions,
@@ -510,10 +533,14 @@ async function getSettings(req, res, next) {
 async function updateSettings(req, res, next) {
   try {
     const settingsHelper = require('../utils/settingsHelper');
-    const { max_upload_mb, payment_enabled, payment_gateway, payment_instructions, qris_nmid, qris_merchant_name, qris_merchant_city, qris_mode } = req.body || {};
+    const { max_upload_mb, trash_retention_days, payment_enabled, payment_gateway, payment_instructions, qris_nmid, qris_merchant_name, qris_merchant_city, qris_mode } = req.body || {};
     if (max_upload_mb !== undefined) {
       const mb = Math.min(5000, Math.max(1, parseInt(String(max_upload_mb), 10) || 500));
       await settingsHelper.setSetting('max_upload_mb', mb);
+    }
+    if (trash_retention_days !== undefined) {
+      const days = Math.min(3650, Math.max(1, parseInt(String(trash_retention_days), 10) || 30));
+      await settingsHelper.setSetting('trash_retention_days', days);
     }
     if (payment_enabled !== undefined) {
       await settingsHelper.setSetting('payment_enabled', payment_enabled ? 'true' : 'false');
@@ -529,6 +556,7 @@ async function updateSettings(req, res, next) {
     if (qris_merchant_city !== undefined) await settingsHelper.setSetting('qris_merchant_city', String(qris_merchant_city).trim());
     if (qris_mode !== undefined) await settingsHelper.setSetting('qris_mode', qris_mode === 'static' ? 'static' : 'dynamic');
     const maxUploadMb = (await settingsHelper.getSetting('max_upload_mb')) || process.env.MAX_UPLOAD_MB || 500;
+    const trashRetentionDays = (await settingsHelper.getSetting('trash_retention_days')) || process.env.TRASH_RETENTION_DAYS || 30;
     const paymentEnabled = (await settingsHelper.getSetting('payment_enabled'));
     const paymentGateway = (await settingsHelper.getSetting('payment_gateway')) || 'manual';
     const paymentInstructions = (await settingsHelper.getSetting('payment_instructions')) || '';
@@ -536,9 +564,17 @@ async function updateSettings(req, res, next) {
     const qrisMerchantName = (await settingsHelper.getSetting('qris_merchant_name')) || '';
     const qrisMerchantCity = (await settingsHelper.getSetting('qris_merchant_city')) || '';
     const qrisMode = (await settingsHelper.getSetting('qris_mode')) || 'static';
+    await Activity.log({
+      userId: req.user.id,
+      action: 'admin_settings_update',
+      resourceType: 'settings',
+      resourceId: null,
+      details: req.body || {},
+    });
     res.json({
       max_upload_mb: parseInt(String(maxUploadMb), 10) || 500,
       default_storage_bytes: 1073741824,
+      trash_retention_days: parseInt(String(trashRetentionDays), 10) || 30,
       payment_enabled: paymentEnabled !== 'false' && paymentEnabled !== '0',
       payment_gateway: paymentGateway,
       payment_instructions: paymentInstructions,

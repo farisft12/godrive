@@ -189,6 +189,15 @@ async function approvePayment(req, res, next) {
       [adminId, id]
     );
 
+    const Activity = require('../models/Activity');
+    await Activity.log({
+      userId: adminId,
+      action: 'admin_payment_approve',
+      resourceType: 'payment',
+      resourceId: pay.id,
+      details: { order_id: pay.order_id, user_id: pay.user_id, amount: pay.amount },
+    });
+
     const paymentForEmail = {
       order_id: pay.order_id,
       amount: pay.amount,
@@ -251,6 +260,15 @@ async function rejectPayment(req, res, next) {
       "UPDATE payments SET status = 'REJECTED', admin_note = $1 WHERE id = $2",
       [adminNote || null, id]
     );
+
+    const Activity = require('../models/Activity');
+    await Activity.log({
+      userId: req.user.id,
+      action: 'admin_payment_reject',
+      resourceType: 'payment',
+      resourceId: pay.id,
+      details: { order_id: pay.order_id, user_id: pay.user_id, admin_note: adminNote || null },
+    });
 
     const paymentForEmail = {
       order_id: pay.order_id,

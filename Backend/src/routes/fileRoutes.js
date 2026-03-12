@@ -13,6 +13,7 @@ router.use(authMiddleware);
 router.use(apiLimiter);
 
 router.post('/upload/init', uploadController.initChunked);
+router.get('/upload/status', uploadController.statusChunked);
 router.post('/upload/chunk', (req, res, next) => {
   req.setTimeout(120000);
   res.setTimeout(120000);

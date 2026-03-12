@@ -8,6 +8,7 @@ const fs = require('fs');
 const { UPLOADS } = require('../config/storage');
 const storageService = require('../services/storageService');
 const thumbnailService = require('../services/thumbnailService');
+const Activity = require('../models/Activity');
 
 function isImageMime(mime) {
   return mime && mime.startsWith('image/');
@@ -34,6 +35,13 @@ async function createShare(req, res, next) {
         passwordHash,
         expiresAt,
       });
+      await Activity.log({
+        userId: req.userId,
+        action: 'share_create',
+        resourceType: 'share',
+        resourceId: share.id,
+        details: { folder_id, expires_at: share.expires_at },
+      });
       return res.status(201).json({
         id: share.id,
         token: share.token,
@@ -50,6 +58,13 @@ async function createShare(req, res, next) {
       fileId: file_id,
       passwordHash,
       expiresAt,
+    });
+    await Activity.log({
+      userId: req.userId,
+      action: 'share_create',
+      resourceType: 'share',
+      resourceId: share.id,
+      details: { file_id, expires_at: share.expires_at },
     });
 
     res.status(201).json({
@@ -185,12 +200,26 @@ async function downloadByToken(req, res, next) {
       }
       const fullFile = await File.findById(file.id, share.user_id);
       if (!fullFile || !fullFile.encrypted_path) return res.status(404).json({ error: 'File not found' });
+      await Activity.log({
+        userId: share.user_id,
+        action: 'share_download',
+        resourceType: 'share',
+        resourceId: share.id,
+        details: { token, file_id: file.id },
+      });
       const buf = await storageService.readEncryptedFile(fullFile.encrypted_path);
       res.setHeader('Content-Disposition', `attachment; filename="${file.original_name}"`);
       res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
       return res.send(buf);
     }
 
+    await Activity.log({
+      userId: share.user_id,
+      action: 'share_download',
+      resourceType: 'share',
+      resourceId: share.id,
+      details: { token, file_id: share.file_id || null },
+    });
     const buf = await storageService.readEncryptedFile(share.encrypted_path);
     res.setHeader('Content-Disposition', `attachment; filename="${share.original_name}"`);
     res.setHeader('Content-Type', share.mime_type || 'application/octet-stream');

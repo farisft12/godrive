@@ -44,6 +44,14 @@ async function download(req, res, next) {
     const file = await File.findById(req.params.id, req.userId);
     if (!file) return res.status(404).json({ error: 'File not found' });
 
+    await Activity.log({
+      userId: req.userId,
+      action: 'download',
+      resourceType: 'file',
+      resourceId: file.id,
+      details: { name: file.original_name, size_bytes: file.size_bytes },
+    });
+
     res.setHeader('Content-Disposition', `attachment; filename="${file.original_name}"`);
     res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
 

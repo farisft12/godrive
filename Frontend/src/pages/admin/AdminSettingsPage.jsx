@@ -9,6 +9,7 @@ export default function AdminSettingsPage() {
   const { success: showSuccess, error: showError } = useToast();
   const queryClient = useQueryClient();
   const [maxUploadMb, setMaxUploadMb] = useState(500);
+  const [trashRetentionDays, setTrashRetentionDays] = useState(30);
   const [paymentEnabled, setPaymentEnabled] = useState(true);
   const [paymentGateway, setPaymentGateway] = useState('manual');
   const [paymentInstructions, setPaymentInstructions] = useState('');
@@ -25,6 +26,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     if (data) {
       setMaxUploadMb(data.max_upload_mb ?? 500);
+      setTrashRetentionDays(data.trash_retention_days ?? 30);
       setPaymentEnabled(data.payment_enabled !== false);
       setPaymentGateway(data.payment_gateway || 'manual');
       setPaymentInstructions(data.payment_instructions || '');
@@ -50,6 +52,7 @@ export default function AdminSettingsPage() {
     e.preventDefault();
     updateMutation.mutate({
       max_upload_mb: Math.min(5000, Math.max(1, parseInt(maxUploadMb, 10) || 500)),
+      trash_retention_days: Math.min(3650, Math.max(1, parseInt(trashRetentionDays, 10) || 30)),
       payment_enabled: paymentEnabled,
       payment_gateway: paymentGateway,
       payment_instructions: paymentInstructions,
@@ -84,6 +87,21 @@ export default function AdminSettingsPage() {
                   className="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">1 – 5000 MB per file</p>
+              </div>
+              <div>
+                <label htmlFor="trash_retention_days" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {t('trash') || 'Trash'} retention (days)
+                </label>
+                <input
+                  id="trash_retention_days"
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={trashRetentionDays}
+                  onChange={(e) => setTrashRetentionDays(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Auto-delete trashed files older than this</p>
               </div>
               <div>
                 <dt className="text-sm text-gray-500 dark:text-gray-400">{t('defaultUserStorage') || 'Penyimpanan default user'}</dt>

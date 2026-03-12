@@ -157,6 +157,18 @@ async function getTotalSizeByUser(userId) {
   return Number(rows[0].total);
 }
 
+async function listTrashedOlderThan(cutoffDate, limit = 200) {
+  const { rows } = await pool.query(
+    `SELECT f.id, f.user_id, f.blob_id, f.original_name, f.size_bytes, f.trashed_at
+     FROM ${FILES} f
+     WHERE f.trashed_at IS NOT NULL AND f.trashed_at < $1
+     ORDER BY f.trashed_at ASC
+     LIMIT $2`,
+    [cutoffDate, limit]
+  );
+  return rows;
+}
+
 module.exports = {
   createBlob,
   getBlobBySha256,
@@ -172,4 +184,5 @@ module.exports = {
   setCompressed,
   remove,
   getTotalSizeByUser,
+  listTrashedOlderThan,
 };

@@ -113,12 +113,14 @@ export const filesApi = {
       onUploadProgress: onProgress,
     }).then((r) => r.data),
   // Chunked upload: init -> chunks -> complete. Params: file, folderId, onProgress, signal.
-  uploadChunked: async function (file, folderId, onProgress, signal) {
-    // #region agent log
-    fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'start chunk upload',data:{fileSize:file?.size,fileName:file?.name,folderId},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    const totalSize = file.size;
+  getChunkStatus: async function (uploadId, signal) {
     const chunkClient = getChunkUploadClient();
+    const res = await chunkClient.get('/api/files/upload/status', { params: { upload_id: uploadId }, signal });
+    return res.data;
+  },
+  initChunked: async function (file, folderId, signal) {
+    const chunkClient = getChunkUploadClient();
+    const totalSize = file.size;
     const initRes = await chunkClient.post(
       '/api/files/upload/init',
       {
@@ -129,7 +131,20 @@ export const filesApi = {
       },
       { signal }
     );
-    const { upload_id: uploadId, chunk_size: chunkSize } = initRes.data;
+    return initRes.data;
+  },
+  uploadChunked: async function (file, folderId, onProgress, signal, opts = {}) {
+    // #region agent log
+    fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'start chunk upload',data:{fileSize:file?.size,fileName:file?.name,folderId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    const totalSize = file.size;
+    const chunkClient = getChunkUploadClient();
+    const startIndex = Number.isInteger(opts.startIndex) && opts.startIndex >= 0 ? opts.startIndex : 0;
+    const initData = opts.uploadId
+      ? { upload_id: opts.uploadId, chunk_size: opts.chunkSize || (opts.effectiveChunkSize || undefined) }
+      : await filesApi.initChunked(file, folderId, signal);
+    const uploadId = initData.upload_id;
+    const chunkSize = initData.chunk_size;
     // #region agent log
     fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'init response',data:{uploadId,chunkSize},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
@@ -149,7 +164,7 @@ export const filesApi = {
     const numChunks = Math.ceil(totalSize / effectiveChunkSize);
     let uploaded = 0;
 
-    for (let index = 0; index < numChunks; index++) {
+    for (let index = startIndex; index < numChunks; index++) {
       const t0 = Date.now();
       const start = index * effectiveChunkSize;
       const end = Math.min(start + effectiveChunkSize, totalSize);
@@ -184,7 +199,7 @@ export const filesApi = {
 
     const completeRes = await chunkClient.post('/api/files/upload/complete', { upload_id: uploadId }, { signal });
     if (onProgress) onProgress(100);
-    return completeRes.data;
+    return { ...completeRes.data, upload_id: uploadId };
   },
   rename: function (id, original_name) {
     return axiosInstance.put(`/api/files/${id}/rename`, { original_name }).then((r) => r.data);

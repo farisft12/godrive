@@ -5,6 +5,11 @@ import { filesApi } from '../services/axios';
 const UploadContext = createContext(null);
 
 const CHUNK_THRESHOLD_BYTES = 80 * 1024 * 1024; // 80 MB: use chunked upload above this
+const UPLOAD_RESUME_PREFIX = 'godrive_upload_resume_v1:';
+
+function fingerprintFile(file, folderId) {
+  return `${file?.name || ''}:${file?.size || 0}:${file?.lastModified || 0}:${folderId || ''}`;
+}
 
 function makeUploadId() {
   return `upload-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -41,12 +46,59 @@ export function UploadProvider({ children }) {
             signal: controller.signal,
           });
         } else {
-          await filesApi.uploadChunked(item.file, item.folderId || null, setProgress, controller.signal);
+          const fp = fingerprintFile(item.file, item.folderId || null);
+          const key = UPLOAD_RESUME_PREFIX + fp;
+          let uploadId = item.uploadId || null;
+          let startIndex = 0;
+          let chunkSize = null;
+          if (uploadId) {
+            try {
+              const status = await filesApi.getChunkStatus(uploadId, controller.signal);
+              startIndex = Number(status.next_index) || 0;
+              chunkSize = Number(status.chunk_size) || null;
+            } catch (_) {
+              uploadId = null;
+            }
+          } else {
+            const saved = localStorage.getItem(key);
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved);
+                uploadId = parsed.uploadId || null;
+              } catch (_) {}
+            }
+            if (uploadId) {
+              try {
+                const status = await filesApi.getChunkStatus(uploadId, controller.signal);
+                startIndex = Number(status.next_index) || 0;
+                chunkSize = Number(status.chunk_size) || null;
+              } catch (_) {
+                uploadId = null;
+              }
+            }
+          }
+
+          // Ensure state contains uploadId (for Resume button).
+          if (uploadId) {
+            setUploads((prev) =>
+              prev.map((u) => (u.id === item.id ? { ...u, uploadId } : u))
+            );
+          }
+
+          const result = await filesApi.uploadChunked(item.file, item.folderId || null, setProgress, controller.signal, uploadId ? { uploadId, startIndex, chunkSize } : {});
+          if (result?.upload_id) {
+            localStorage.setItem(key, JSON.stringify({ uploadId: result.upload_id }));
+          }
         }
         setUploads((prev) =>
           prev.map((u) => (u.id === item.id ? { ...u, status: 'done', progress: 100 } : u))
         );
         onUploadedRef.current?.();
+        // Cleanup resume info on success
+        try {
+          const fp = fingerprintFile(item.file, item.folderId || null);
+          localStorage.removeItem(UPLOAD_RESUME_PREFIX + fp);
+        } catch (_) {}
         setTimeout(() => removeUpload(item.id), 2000);
       } catch (err) {
         if (err.name === 'AbortError' || err.code === 'ERR_CANCELED') {
@@ -90,6 +142,7 @@ export function UploadProvider({ children }) {
         progress: 0,
         status: 'uploading',
         error: null,
+        uploadId: null,
       }));
       setUploads((prev) => [...prev, ...newItems]);
       newItems.forEach((item) => startUpload(item));

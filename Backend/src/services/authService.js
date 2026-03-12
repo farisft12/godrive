@@ -124,6 +124,13 @@ async function login(email, password) {
   }
 
   const token = signToken({ userId: fullUser.id });
+  await Activity.log({
+    userId: fullUser.id,
+    action: 'login',
+    resourceType: 'user',
+    resourceId: fullUser.id,
+    details: { email: fullUser.email },
+  });
   return {
     user: {
       id: fullUser.id,

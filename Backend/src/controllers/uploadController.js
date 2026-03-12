@@ -175,6 +175,41 @@ async function initChunked(req, res, next) {
   }
 }
 
+async function statusChunked(req, res, next) {
+  try {
+    const uploadId = req.query.upload_id ? String(req.query.upload_id) : '';
+    if (!uploadId) return res.status(400).json({ error: 'upload_id required' });
+
+    const dirPath = path.join(CHUNK_UPLOADS, uploadId);
+    const metaPath = path.join(dirPath, META_FILENAME);
+    let metaRaw;
+    try {
+      metaRaw = await fs.readFile(metaPath, 'utf8');
+    } catch (e) {
+      if (e.code === 'ENOENT') return res.status(404).json({ error: 'Upload session not found' });
+      throw e;
+    }
+
+    let meta;
+    try {
+      meta = JSON.parse(metaRaw);
+    } catch (_) {
+      return res.status(400).json({ error: 'Upload session invalid' });
+    }
+    if (meta.userId !== req.userId) return res.status(403).json({ error: 'Forbidden' });
+
+    return res.json({
+      upload_id: uploadId,
+      next_index: meta.nextIndex || 0,
+      received_size: meta.receivedSize || 0,
+      total_size: meta.totalSize || 0,
+      chunk_size: getChunkLimitBytes(),
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 async function uploadChunk(req, res, next) {
   try {
     if (!req.file || (!req.file.buffer && !req.file.path)) {
@@ -315,4 +350,4 @@ async function completeChunked(req, res, next) {
   }
 }
 
-module.exports = { upload, uploadSingle, initChunked, uploadChunk, completeChunked };
+module.exports = { upload, uploadSingle, initChunked, statusChunked, uploadChunk, completeChunked };
