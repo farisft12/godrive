@@ -169,6 +169,7 @@ export default function Dashboard() {
       }
     }
     setSelectedIds(new Set());
+    queryClient.invalidateQueries({ queryKey: ['files'] });
     refetchFiles();
     refreshUser?.();
     if (selectedFileIds.length > 0) toast.success('Moved to trash');
@@ -345,6 +346,7 @@ export default function Dashboard() {
             try {
               await filesApi.trash(file.id);
               toast.success('Moved to trash');
+              queryClient.invalidateQueries({ queryKey: ['files'] });
               refetchFiles();
               refreshUser?.();
             } catch (err) {

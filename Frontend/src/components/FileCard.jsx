@@ -7,6 +7,7 @@ import { useToast } from '../context/ToastContext';
 import FileActionMenu from './FileActionMenu';
 import { useLongPress } from '../hooks/useLongPress';
 import clsx from 'clsx';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function FileCard({
   file,
@@ -30,6 +31,7 @@ export default function FileCard({
   const [loading, setLoading] = useState(false);
   const [thumbUrl, setThumbUrl] = useState(null);
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const API_BASE = import.meta.env.VITE_API_URL || '';
   const canFetchThumb = isImage(file?.mime_type) || isVideo(file?.mime_type);
@@ -147,6 +149,7 @@ export default function FileCard({
     try {
       await filesApi.trash(file.id);
       toast.success('Moved to trash');
+      queryClient.invalidateQueries({ queryKey: ['files'] });
       onDelete?.();
     } catch (err) {
       toast.error(err.message || 'Failed');

@@ -3,9 +3,11 @@ import { X, Share2, Copy, Users } from 'lucide-react';
 import { formatSize, formatDate, getFileIconComponent } from '../utils/fileIcons';
 import { filesApi, shareApi } from '../services/axios';
 import { useToast } from '../context/ToastContext';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function FileInfoPanel({ file, filePath, sharedFileIds, onClose, onDeleted, onRename }) {
   const toast = useToast();
+  const queryClient = useQueryClient();
   const [copyingLink, setCopyingLink] = useState(false);
   const [collaborators, setCollaborators] = useState([]);
 
@@ -57,6 +59,7 @@ export default function FileInfoPanel({ file, filePath, sharedFileIds, onClose, 
     try {
       await filesApi.trash(file.id);
       toast.success('Moved to trash');
+      queryClient.invalidateQueries({ queryKey: ['files'] });
       onDeleted?.();
     } catch (e) {
       toast.error(e.message || 'Failed');

@@ -1,9 +1,10 @@
 import { useState, useCallback, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import DashboardLayout from '../components/DashboardLayout';
 import FileGrid from '../components/FileGrid';
 import ConfirmModal from '../components/ConfirmModal';
 import { filesApi } from '../services/axios';
+import { useFiles } from '../hooks/useFiles';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -20,11 +21,7 @@ export default function Trash() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const lastClickedIndexRef = useRef(null);
 
-  const { data, refetch } = useQuery({
-    queryKey: ['files', 'trash'],
-    queryFn: () => filesApi.list(null, true),
-  });
-  const files = data?.files ?? [];
+  const { files, refetch } = useFiles(null, true);
 
   const handleSelectFile = useCallback(
     (item, opts = {}) => {
