@@ -52,6 +52,13 @@ export default function PricingPage() {
     return Math.round(totalAfterTax * (1 - discountPct / 100));
   };
 
+  /** Harga awal (setelah pajak, sebelum diskon) */
+  const getOriginalPrice = (plan, useYearly) => {
+    const base = useYearly ? plan.price_yearly : plan.price_amount;
+    if (base == null || base === '') return 0;
+    return Math.round(Number(base) * 1.11);
+  };
+
   return (
     <div className="min-h-screen bg-white text-gray-800 antialiased">
       <header className="sticky top-0 z-50 px-4 sm:px-6 lg:px-8 py-4 bg-white/90 backdrop-blur-sm border-b border-gray-100">
@@ -120,6 +127,9 @@ export default function PricingPage() {
               const isRecommended = recommendedId != null && plan.id === recommendedId;
               const displayYearly = yearly && hasYearly;
               const grandTotal = getGrandTotal(plan, displayYearly);
+              const originalPrice = getOriginalPrice(plan, displayYearly);
+              const hasDiscount = (plan.discount_percent ?? 0) > 0 && grandTotal > 0;
+              const discountAmount = hasDiscount ? originalPrice - grandTotal : 0;
               const priceLabel = displayYearly ? '/ tahun' : '/ bulan';
               return (
                 <motion.div
@@ -138,20 +148,31 @@ export default function PricingPage() {
                       Direkomendasikan
                     </span>
                   )}
-                  {plan.discount_percent > 0 && (
-                    <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium mb-4 w-fit">
+                  {hasDiscount && (
+                    <span className="inline-block px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs font-medium mb-2 w-fit">
                       Hemat {plan.discount_percent}%
                     </span>
                   )}
                   <h2 className="font-semibold text-gray-900 text-lg">{plan.name}</h2>
                   <p className="text-2xl font-bold text-primary-600 mt-2">{formatSize(plan.storage_bytes)}</p>
                   <p className="text-sm text-gray-500 mt-1">penyimpanan</p>
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-1">
                     {grandTotal === 0 ? (
                       <p className="text-xl font-semibold text-gray-900">Gratis</p>
                     ) : (
                       <>
-                        <p className="text-xl font-semibold text-gray-900">
+                        {hasDiscount && (
+                          <>
+                            <p className="text-sm text-gray-400 line-through">
+                              {formatPrice(originalPrice, plan.price_currency)}
+                              {priceLabel}
+                            </p>
+                            <p className="text-xs text-green-600 font-medium">
+                              Hemat {plan.discount_percent}% · Hemat {formatPrice(discountAmount, plan.price_currency)}
+                            </p>
+                          </>
+                        )}
+                        <p className={`font-semibold ${hasDiscount ? 'text-xl text-green-600' : 'text-xl text-gray-900'}`}>
                           {formatPrice(grandTotal, plan.price_currency)}
                           {priceLabel}
                         </p>

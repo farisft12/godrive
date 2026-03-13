@@ -83,6 +83,13 @@ export default function Welcome() {
     return Math.round(totalAfterTax * (1 - discountPct / 100));
   };
 
+  /** Harga awal (setelah pajak, sebelum diskon) */
+  const getOriginalPrice = (plan, useYearly) => {
+    const base = useYearly ? plan.price_yearly : plan.price_amount;
+    if (base == null || base === '') return 0;
+    return Math.round(Number(base) * 1.11);
+  };
+
   const savePercent = Math.max(17, ...(plans.map((p) => p.discount_percent || 0)));
 
   return (
@@ -396,6 +403,9 @@ export default function Welcome() {
                 const hasYearly = plan.price_yearly != null && plan.price_yearly > 0;
                 const displayYearly = yearly && hasYearly;
                 const grandTotal = getGrandTotal(plan, displayYearly);
+                const originalPrice = getOriginalPrice(plan, displayYearly);
+                const hasDiscount = (plan.discount_percent ?? 0) > 0 && grandTotal > 0;
+                const discountAmount = hasDiscount ? originalPrice - grandTotal : 0;
                 const priceLabel = displayYearly ? '/ tahun' : '/ bulan';
                 const checkoutQuery = displayYearly ? `?plan=${plan.id}&yearly=1` : `?plan=${plan.id}`;
                 return (
@@ -407,7 +417,7 @@ export default function Welcome() {
                   transition={{ delay: i * 0.08 }}
                   className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all"
                 >
-                  {plan.discount_percent > 0 && (
+                  {hasDiscount && (
                     <span className="inline-block px-2.5 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-medium mb-3">
                       Hemat {plan.discount_percent}%
                     </span>
@@ -415,15 +425,34 @@ export default function Welcome() {
                   <h3 className="font-semibold text-gray-900 text-lg">{plan.name}</h3>
                   <p className="text-2xl font-bold text-blue-600 mt-2">{formatSize(plan.storage_bytes)}</p>
                   <p className="text-sm text-gray-500 mt-1">penyimpanan</p>
-                  <p className="mt-4 text-xl font-semibold text-gray-900">
-                    {grandTotal === 0 ? 'Gratis' : formatPrice(grandTotal, plan.price_currency)}
-                    {grandTotal > 0 && priceLabel}
-                  </p>
-                  {hasYearly && !displayYearly && (
-                    <p className="text-sm text-gray-600 mt-1">
-                      {formatPrice(getGrandTotal(plan, true), plan.price_currency)}/ tahun
-                    </p>
-                  )}
+                  <div className="mt-4 space-y-1">
+                    {grandTotal === 0 ? (
+                      <p className="text-xl font-semibold text-gray-900">Gratis</p>
+                    ) : (
+                      <>
+                        {hasDiscount && (
+                          <>
+                            <p className="text-sm text-gray-400 line-through">
+                              {formatPrice(originalPrice, plan.price_currency)}
+                              {priceLabel}
+                            </p>
+                            <p className="text-xs text-green-600 font-medium">
+                              Hemat {plan.discount_percent}% · Hemat {formatPrice(discountAmount, plan.price_currency)}
+                            </p>
+                          </>
+                        )}
+                        <p className={`font-semibold ${hasDiscount ? 'text-xl text-green-600' : 'text-xl text-gray-900'}`}>
+                          {formatPrice(grandTotal, plan.price_currency)}
+                          {priceLabel}
+                        </p>
+                        {hasYearly && !displayYearly && (
+                          <p className="text-sm text-gray-600 mt-1">
+                            {formatPrice(getGrandTotal(plan, true), plan.price_currency)}/ tahun
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
                   <Link
                     to={user ? `/checkout${checkoutQuery}` : `/login?redirect=${encodeURIComponent('/checkout' + checkoutQuery)}`}
                     className="mt-6 block"
