@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useDropzone } from 'react-dropzone';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
@@ -19,6 +20,7 @@ export default function DashboardLayout({
   onCreateFolder,
   searchPlaceholder,
 }) {
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const { addFiles } = useUpload();
@@ -64,7 +66,15 @@ export default function DashboardLayout({
         />
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden" {...getRootProps()}>
           <input {...getInputProps()} />
-          {children}
+          <motion.div
+            key={location.pathname + (location.search || '')}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: 'easeOut' }}
+            className="flex-1 flex flex-col min-h-0 overflow-auto"
+          >
+            {children}
+          </motion.div>
         </main>
       </div>
 

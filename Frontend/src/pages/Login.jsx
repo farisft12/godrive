@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -12,11 +13,28 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
+  const [transitionStage, setTransitionStage] = useState('idle'); // idle | fadeOut
   const { user, loading: authLoading, login } = useAuth();
   const { error: showError } = useToast();
   const navigate = useNavigate();
+  const navTimerRef = useRef(null);
 
-  if (!authLoading && user) {
+  useEffect(() => {
+    return () => {
+      if (navTimerRef.current) window.clearTimeout(navTimerRef.current);
+    };
+  }, []);
+
+  const startLoginTransition = (to) => {
+    setTransitioning(true);
+    setTransitionStage('fadeOut');
+    navTimerRef.current = window.setTimeout(() => navigate(to, { replace: true }), 280);
+  };
+
+  // Jangan auto-redirect saat animasi login sedang jalan,
+  // karena `user` akan langsung ter-set dan akan memotong animasi.
+  if (!authLoading && user && !transitioning) {
     const to = redirect === '/checkout' && planId ? `/checkout?plan=${planId}` : redirect;
     return <Navigate to={to} replace />;
   }
@@ -27,7 +45,7 @@ export default function Login() {
     try {
       await login(email, password);
       const to = redirect === '/checkout' && planId ? `/checkout?plan=${planId}` : redirect;
-      navigate(to);
+      startLoginTransition(to);
     } catch (err) {
       const msg = err.response?.data?.error || err.message || 'Login failed';
       showError(msg);
@@ -39,15 +57,30 @@ export default function Login() {
     }
   };
 
+  const cardVariants = {
+    idle: { opacity: 1, y: 0, scale: 1 },
+    fadeOut: {
+      opacity: 0,
+      y: 6,
+      scale: 0.98,
+      transition: { duration: 0.25 },
+    },
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 relative overflow-hidden">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Link to="/" className="text-2xl font-bold text-primary-600">
             GoDrive
           </Link>
         </div>
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
+        <motion.div
+          initial={false}
+          animate={transitionStage}
+          variants={cardVariants}
+          className={`bg-white rounded-2xl shadow-lg border border-gray-100 p-8 relative ${transitioning ? 'pointer-events-none select-none' : ''}`}
+        >
           <h1 className="text-xl font-semibold text-gray-900 mb-6">Log in</h1>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -90,7 +123,7 @@ export default function Login() {
             </div>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || transitioning}
               className="w-full py-2.5 rounded-lg bg-primary-600 text-white font-medium hover:bg-primary-700 disabled:opacity-50"
             >
               {loading ? 'Logging in...' : 'Log in'}
@@ -102,7 +135,7 @@ export default function Login() {
               Sign up
             </Link>
           </p>
-        </div>
+        </motion.div>
       </div>
     </div>
   );
