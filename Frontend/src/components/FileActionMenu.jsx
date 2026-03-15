@@ -9,12 +9,14 @@ import {
   Trash2,
   Info,
   MoreVertical,
+  Loader2,
 } from 'lucide-react';
 import clsx from 'clsx';
 
 export default function FileActionMenu({
   type = 'file',
   onDownload,
+  isDownloading = false,
   onShare,
   onMove,
   onRename,
@@ -76,10 +78,15 @@ export default function FileActionMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onDownload)}
-                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                disabled={isDownloading}
+                className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Download className="w-4 h-4 text-gray-500" />
-                Download
+                {isDownloading ? (
+                  <Loader2 className="w-4 h-4 text-gray-500 animate-spin shrink-0" aria-hidden />
+                ) : (
+                  <Download className="w-4 h-4 text-gray-500" />
+                )}
+                {isDownloading ? 'Downloading...' : 'Download'}
               </button>
               <button
                 type="button"
@@ -104,10 +111,15 @@ export default function FileActionMenu({
                 <button
                   type="button"
                   onClick={() => handleAction(onDownload)}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left"
+                  disabled={isDownloading}
+                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <Download className="w-4 h-4 text-gray-500" />
-                  Download
+                  {isDownloading ? (
+                    <Loader2 className="w-4 h-4 text-gray-500 animate-spin shrink-0" aria-hidden />
+                  ) : (
+                    <Download className="w-4 h-4 text-gray-500" />
+                  )}
+                  {isDownloading ? 'Downloading...' : 'Download'}
                 </button>
               )}
               {onShare && (

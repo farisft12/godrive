@@ -61,7 +61,7 @@ export default function UploadPopup() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
-      className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
+      className="w-80 sm:w-96 bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden"
     >
       <button
         type="button"

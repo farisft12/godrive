@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 import { UploadProvider } from './context/UploadContext';
+import { DownloadProvider } from './context/DownloadContext';
 import { LanguageProvider } from './context/LanguageContext';
 import Welcome from './pages/Welcome';
 import Login from './pages/Login';
@@ -172,13 +173,15 @@ export default function App() {
       <ThemeProvider>
         <LanguageProvider>
           <AuthProvider>
-            <UploadProvider>
-              <ToastProvider>
-                <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                  <AppRoutes />
-                </BrowserRouter>
-              </ToastProvider>
-            </UploadProvider>
+            <DownloadProvider>
+              <UploadProvider>
+                <ToastProvider>
+                  <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                    <AppRoutes />
+                  </BrowserRouter>
+                </ToastProvider>
+              </UploadProvider>
+            </DownloadProvider>
           </AuthProvider>
         </LanguageProvider>
       </ThemeProvider>

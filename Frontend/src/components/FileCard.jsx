@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Share2 } from 'lucide-react';
+import { Share2, Loader2 } from 'lucide-react';
 import { getFileIconComponent, formatSize, formatDate, isImage, isVideo, isPdf } from '../utils/fileIcons';
 import { filesApi } from '../services/axios';
 import { useToast } from '../context/ToastContext';
+import { useDownload } from '../context/DownloadContext';
 import FileActionMenu from './FileActionMenu';
 import { useLongPress } from '../hooks/useLongPress';
 import clsx from 'clsx';
@@ -32,6 +33,7 @@ export default function FileCard({
   const [thumbUrl, setThumbUrl] = useState(null);
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { addDownload, updateProgress, setDone, setError } = useDownload();
 
   const API_BASE = import.meta.env.VITE_API_URL || '';
   const canFetchThumb = isImage(file?.mime_type) || isVideo(file?.mime_type);
@@ -134,11 +136,17 @@ export default function FileCard({
   }, [file?.id, file?.mime_type, canFetchThumb]);
 
   const handleDownload = async () => {
+    const downloadId = crypto.randomUUID?.() || `${Date.now()}`;
+    addDownload(downloadId, file.original_name);
+    toast.success('Download started');
     setLoading(true);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const onProgress = (p, speed, loaded, total) => updateProgress(downloadId, p, speed, loaded, total);
     try {
-      await filesApi.download(file.id, file.original_name);
-      toast.success('Download started');
+      await filesApi.download(file.id, file.original_name, onProgress);
+      setDone(downloadId);
     } catch (err) {
+      setError(downloadId, err.message || 'Download failed');
       toast.error(err.message || 'Download failed');
     } finally {
       setLoading(false);
@@ -197,6 +205,11 @@ export default function FileCard({
         data-selectable-id={file.id}
       >
         <div className="aspect-square flex flex-col items-center justify-center p-4 relative">
+          {loading && (
+            <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl z-10">
+              <Loader2 className="w-8 h-8 text-primary-600 animate-spin" aria-hidden />
+            </div>
+          )}
           <div
             role="button"
             tabIndex={0}
@@ -243,6 +256,7 @@ export default function FileCard({
             <FileActionMenu
               type="file"
               onDownload={handleDownload}
+              isDownloading={loading}
               onShare={() => onShare?.(file)}
               onMove={() => onMove?.(file)}
               onRename={() => onRename?.(file)}
@@ -315,16 +329,25 @@ export default function FileCard({
           <Icon className="w-5 h-5 text-gray-600" />
         )}
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 relative">
+        {loading && (
+          <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg z-10" />
+        )}
         <p className="font-medium text-gray-900 truncate">{file.original_name}</p>
         <p className="text-xs text-gray-500">
           {formatSize(file.size_bytes)} · {formatDate(file.updated_at)}
         </p>
       </div>
-      <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0 touch-manipulation">
+      <div className="opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0 touch-manipulation relative">
+        {loading && (
+          <span className="absolute inset-0 flex items-center justify-center z-10">
+            <Loader2 className="w-5 h-5 text-primary-600 animate-spin" aria-hidden />
+          </span>
+        )}
         <FileActionMenu
           type="file"
           onDownload={handleDownload}
+          isDownloading={loading}
           onShare={() => onShare?.(file)}
           onMove={() => onMove?.(file)}
           onRename={() => onRename?.(file)}

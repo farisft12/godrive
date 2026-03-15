@@ -134,9 +134,6 @@ export const filesApi = {
     return initRes.data;
   },
   uploadChunked: async function (file, folderId, onProgress, signal, opts = {}) {
-    // #region agent log
-    fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'start chunk upload',data:{fileSize:file?.size,fileName:file?.name,folderId},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     const totalSize = file.size;
     const chunkClient = getChunkUploadClient();
     const startIndex = Number.isInteger(opts.startIndex) && opts.startIndex >= 0 ? opts.startIndex : 0;
@@ -145,9 +142,6 @@ export const filesApi = {
       : await filesApi.initChunked(file, folderId, signal);
     const uploadId = initData.upload_id;
     const chunkSize = initData.chunk_size;
-    // #region agent log
-    fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'init response',data:{uploadId,chunkSize},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     // When using Vite proxy (no VITE_API_URL), proxy limits body — use backend directly in dev via getChunkUploadClient(); else cap at 512 KB
     const PROXY_SAFE_CHUNK = 512 * 1024;
     const useDirectBackend = !!getChunkUploadBaseUrl();
@@ -189,10 +183,6 @@ export const filesApi = {
       } catch (chunkErr) {
         throw chunkErr;
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7532/ingest/3371b891-544b-4946-a0fe-fe47b86157ea',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'eb84bb'},body:JSON.stringify({sessionId:'eb84bb',runId:'pre-fix',hypothesisId:'V1',location:'axios.js:uploadChunked',message:'chunk uploaded',data:{index,chunkBytes:end-start,ms:Date.now()-t0},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-
       uploaded += end - start;
       if (onProgress) onProgress(totalSize ? Math.min(99, Math.round((uploaded / totalSize) * 100)) : 0);
     }
@@ -216,19 +206,63 @@ export const filesApi = {
   delete: function (id) {
     return axiosInstance.delete(`/api/files/${id}`);
   },
-  download: async function (id, filename) {
+  download: async function (id, filename, onProgress) {
     const token = localStorage.getItem('godrive_token');
-    const res = await fetch(`${API_BASE}/api/files/${id}/download`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', `${API_BASE}/api/files/${id}/download`);
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.responseType = 'blob';
+
+      let lastLoaded = 0;
+      let lastTime = Date.now();
+
+      xhr.onprogress = (e) => {
+        if (!onProgress) return;
+        const now = Date.now();
+        const dt = (now - lastTime) / 1000;
+        const speed = dt > 0 ? (e.loaded - lastLoaded) / dt : 0;
+        lastLoaded = e.loaded;
+        lastTime = now;
+        const percent = e.lengthComputable && e.total > 0
+          ? Math.min(99, Math.round((e.loaded / e.total) * 100))
+          : null;
+        onProgress(percent, speed, e.loaded, e.total);
+      };
+
+      xhr.onload = () => {
+        if (xhr.status < 200 || xhr.status >= 300) {
+          const blob = xhr.response;
+          if (blob && typeof blob.text === 'function') {
+            blob.text().then((text) => {
+              try {
+                const data = JSON.parse(text);
+                reject(new Error(data?.error || 'Download failed'));
+              } catch (_) {
+                reject(new Error('Download failed'));
+              }
+            }).catch(() => reject(new Error('Download failed')));
+          } else {
+            reject(new Error('Download failed'));
+          }
+          return;
+        }
+        const blob = xhr.response;
+        const size = blob && typeof blob.size === 'number' ? blob.size : 0;
+        if (onProgress) onProgress(100, 0, size, size);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'download';
+        a.click();
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+
+      xhr.onerror = () => reject(new Error('Download failed'));
+      xhr.ontimeout = () => reject(new Error('Download failed'));
+      xhr.send();
     });
-    if (!res.ok) throw new Error('Download failed');
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || 'download';
-    a.click();
-    URL.revokeObjectURL(url);
   },
 };
 

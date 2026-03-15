@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 import UploadPopup from './UploadPopup';
+import DownloadPopup from './DownloadPopup';
 import { useUpload } from '../context/UploadContext';
 
 const DRAG_MOVE_TYPE = 'application/x-godrive-move';
@@ -98,7 +99,10 @@ export default function DashboardLayout({
           </motion.div>
         )}
       </AnimatePresence>
-      <UploadPopup />
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-2">
+        <DownloadPopup />
+        <UploadPopup />
+      </div>
     </div>
   );
 }

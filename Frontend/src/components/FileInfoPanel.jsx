@@ -3,11 +3,13 @@ import { X, Share2, Copy, Users } from 'lucide-react';
 import { formatSize, formatDate, getFileIconComponent } from '../utils/fileIcons';
 import { filesApi, shareApi } from '../services/axios';
 import { useToast } from '../context/ToastContext';
+import { useDownload } from '../context/DownloadContext';
 import { useQueryClient } from '@tanstack/react-query';
 
 export default function FileInfoPanel({ file, filePath, sharedFileIds, onClose, onDeleted, onRename }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const { addDownload, updateProgress, setDone, setError } = useDownload();
   const [copyingLink, setCopyingLink] = useState(false);
   const [collaborators, setCollaborators] = useState([]);
 
@@ -47,10 +49,16 @@ export default function FileInfoPanel({ file, filePath, sharedFileIds, onClose, 
   const isShared = sharedFileIds?.has(file.id);
 
   const handleDownload = async () => {
+    const downloadId = crypto.randomUUID?.() || `${Date.now()}`;
+    addDownload(downloadId, file.original_name);
+    toast.success('Download started');
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const onProgress = (p, speed, loaded, total) => updateProgress(downloadId, p, speed, loaded, total);
     try {
-      await filesApi.download(file.id, file.original_name);
-      toast.success('Download started');
+      await filesApi.download(file.id, file.original_name, onProgress);
+      setDone(downloadId);
     } catch (e) {
+      setError(downloadId, e.message || 'Download failed');
       toast.error(e.message || 'Download failed');
     }
   };

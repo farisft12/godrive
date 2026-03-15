@@ -40,6 +40,7 @@ export default function FileGrid({
   onDropOnFolder,
   onCreateFolder,
   onPaste,
+  downloadingFileId = null,
 }) {
   const [sortBy, setSortBy] = useState('name');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -139,6 +140,7 @@ export default function FileGrid({
           type={contextMenu.type}
           item={contextMenu.item}
           trashView={trashView}
+          downloadingFileId={downloadingFileId}
           sortBy={sortBy}
           onSortChange={setSortBy}
           view={view}

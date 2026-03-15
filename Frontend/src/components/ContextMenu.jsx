@@ -13,6 +13,7 @@ import {
   ClipboardPaste,
   LayoutGrid,
   List,
+  Loader2,
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -23,6 +24,7 @@ export default function ContextMenu({
   type = 'file',
   item,
   trashView = false,
+  downloadingFileId = null,
   sortBy,
   onSortChange,
   view,
@@ -142,10 +144,15 @@ export default function ContextMenu({
             <button
               type="button"
               onClick={() => handleAction(onDownload)}
-              className="flex items-center gap-2 w-full px-4 py-3 min-h-[44px] sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation"
+              disabled={item?.id === downloadingFileId}
+              className="flex items-center gap-2 w-full px-4 py-3 min-h-[44px] sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Download className="w-4 h-4 text-gray-500" />
-              Download
+              {item?.id === downloadingFileId ? (
+                <Loader2 className="w-4 h-4 text-gray-500 animate-spin shrink-0" aria-hidden />
+              ) : (
+                <Download className="w-4 h-4 text-gray-500" />
+              )}
+              {item?.id === downloadingFileId ? 'Downloading...' : 'Download'}
             </button>
             <button
               type="button"
@@ -170,10 +177,15 @@ export default function ContextMenu({
               <button
                 type="button"
                 onClick={() => handleAction(onDownload)}
-                className="flex items-center gap-2 w-full px-4 py-3 min-h-[44px] sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation"
+                disabled={item?.id === downloadingFileId}
+                className="flex items-center gap-2 w-full px-4 py-3 min-h-[44px] sm:py-2.5 text-sm text-gray-700 hover:bg-gray-50 text-left touch-manipulation disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Download className="w-4 h-4 text-gray-500" />
-                Download
+                {item?.id === downloadingFileId ? (
+                  <Loader2 className="w-4 h-4 text-gray-500 animate-spin shrink-0" aria-hidden />
+                ) : (
+                  <Download className="w-4 h-4 text-gray-500" />
+                )}
+                {item?.id === downloadingFileId ? 'Downloading...' : 'Download'}
               </button>
             )}
             {(type === 'file' || type === 'folder') && onShare && (

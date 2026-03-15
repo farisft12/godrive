@@ -5,12 +5,16 @@ const { middlewareWithDynamicLimit, uploadChunk } = require('../middleware/uploa
 const { body } = require('express-validator');
 const { validationResult } = require('express-validator');
 const { authMiddleware } = require('../middleware/authMiddleware');
-const { apiLimiter } = require('../middleware/rateLimitMiddleware');
+const { apiLimiter, uploadChunkLimiter } = require('../middleware/rateLimitMiddleware');
 
 const router = express.Router();
 
 router.use(authMiddleware);
-router.use(apiLimiter);
+/** Chunk/complete pakai limit lebih longgar; route lain pakai apiLimiter. */
+router.use((req, res, next) => {
+  if (req.path === '/upload/chunk' || req.path === '/upload/complete') return uploadChunkLimiter(req, res, next);
+  return apiLimiter(req, res, next);
+});
 
 router.post('/upload/init', uploadController.initChunked);
 router.get('/upload/status', uploadController.statusChunked);

@@ -4,6 +4,7 @@ import { isImage, isVideo, isPdf, isText } from '../utils/fileIcons';
 import { formatSize, formatDate } from '../utils/fileIcons';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { filesApi } from '../services/axios';
+import Hls from 'hls.js';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -16,8 +17,12 @@ export default function FilePreview({ file, open, onClose, onShare }) {
   const [error, setError] = useState(null);
   const [content, setContent] = useState(null);
   const [blobUrl, setBlobUrl] = useState(null);
+  const [streamUrl, setStreamUrl] = useState(null);
+  const [useHls, setUseHls] = useState(false);
   const [imageScale, setImageScale] = useState(1);
   const closeButtonRef = useRef(null);
+  const videoRef = useRef(null);
+  const blobUrlRef = useRef(null);
 
   const handleDownload = useCallback(async () => {
     if (!file) return;
@@ -50,22 +55,73 @@ export default function FilePreview({ file, open, onClose, onShare }) {
     setError(null);
     setLoading(true);
     setImageScale(1);
+    setStreamUrl(null);
+    setUseHls(false);
 
     const token = getToken();
-    const url = `${API_BASE}/api/files/${file.id}/download`;
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-    fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (isVideo(file.mime_type)) {
+      const playlistUrl = `${API_BASE}/api/stream/${file.id}/playlist.m3u8`;
+      fetch(playlistUrl, { method: 'GET', headers })
+        .then((res) => {
+          if (res.ok && Hls.isSupported()) {
+            setStreamUrl(playlistUrl);
+            setContent('video');
+            setUseHls(true);
+            setLoading(false);
+            return;
+          }
+          return fetch(`${API_BASE}/api/files/${file.id}/download`, { headers })
+            .then((r) => {
+              if (!r.ok) throw new Error('Failed to load');
+              return r.blob();
+            })
+            .then((blob) => {
+              const u = URL.createObjectURL(blob);
+              blobUrlRef.current = u;
+              setBlobUrl(u);
+              setContent('video');
+              setUseHls(false);
+            })
+            .finally(() => setLoading(false));
+        })
+        .catch(() => {
+          return fetch(`${API_BASE}/api/files/${file.id}/download`, { headers })
+            .then((r) => {
+              if (!r.ok) throw new Error('Failed to load');
+              return r.blob();
+            })
+            .then((blob) => {
+              const u = URL.createObjectURL(blob);
+              blobUrlRef.current = u;
+              setBlobUrl(u);
+              setContent('video');
+              setUseHls(false);
+            })
+            .catch((err) => setError(err.message))
+            .finally(() => setLoading(false));
+        });
+      return () => {
+        if (blobUrlRef.current) {
+          URL.revokeObjectURL(blobUrlRef.current);
+          blobUrlRef.current = null;
+        }
+      };
+    }
+
+    const url = `${API_BASE}/api/files/${file.id}/download`;
+    fetch(url, { headers })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load');
         return res.blob();
       })
       .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        setBlobUrl(url);
+        const u = URL.createObjectURL(blob);
+        blobUrlRef.current = u;
+        setBlobUrl(u);
         if (isImage(file.mime_type)) {
           setContent('image');
-        } else if (isVideo(file.mime_type)) {
-          setContent('video');
         } else if (isPdf(file.mime_type)) {
           setContent('pdf');
         } else if (isText(file.mime_type)) {
@@ -78,15 +134,35 @@ export default function FilePreview({ file, open, onClose, onShare }) {
       .finally(() => setLoading(false));
 
     return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = null;
+      }
     };
   }, [file?.id, open]);
 
   useEffect(() => {
+    if (!useHls || !streamUrl || !videoRef.current) return;
+    const token = getToken();
+    const hls = new Hls({
+      xhrSetup(xhr) {
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      },
+    });
+    hls.loadSource(streamUrl);
+    hls.attachMedia(videoRef.current);
+    hls.on(Hls.Events.ERROR, (_, data) => {
+      if (data.fatal) {
+        hls.destroy();
+        setUseHls(false);
+        setStreamUrl(null);
+        setError('Video playback failed');
+      }
+    });
     return () => {
-      if (blobUrl) URL.revokeObjectURL(blobUrl);
+      hls.destroy();
     };
-  }, [blobUrl]);
+  }, [useHls, streamUrl]);
 
   if (!file) return null;
 
@@ -106,12 +182,27 @@ export default function FilePreview({ file, open, onClose, onShare }) {
         </div>
       );
     }
-    if (content === 'video' && blobUrl) {
-      return (
-        <video controls autoPlay className="max-w-full max-h-[70vh] rounded-lg" src={blobUrl}>
-          Your browser does not support the video tag.
-        </video>
-      );
+    if (content === 'video') {
+      if (useHls && streamUrl) {
+        return (
+          <video
+            ref={videoRef}
+            controls
+            autoPlay
+            className="max-w-full max-h-[70vh] rounded-lg"
+            playsInline
+          >
+            Your browser does not support the video tag.
+          </video>
+        );
+      }
+      if (blobUrl) {
+        return (
+          <video controls autoPlay className="max-w-full max-h-[70vh] rounded-lg" src={blobUrl} playsInline>
+            Your browser does not support the video tag.
+          </video>
+        );
+      }
     }
     if (content === 'pdf' && blobUrl) {
       return (

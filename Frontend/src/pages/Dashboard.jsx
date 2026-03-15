@@ -12,6 +12,7 @@ import RenameModal from '../components/RenameModal';
 import MoveModal from '../components/MoveModal';
 import NewFolderModal from '../components/NewFolderModal';
 import { useUpload } from '../context/UploadContext';
+import { useDownload } from '../context/DownloadContext';
 import { Download, Share2, FolderInput, Trash2, X } from 'lucide-react';
 import {
   foldersApi,
@@ -30,6 +31,7 @@ export default function Dashboard() {
   const { t } = useLanguage();
   const { refreshUser } = useAuth();
   const { setOnUploaded } = useUpload();
+  const { addDownload, updateProgress, setDone, setError } = useDownload();
   const [view, setView] = useState('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -44,6 +46,7 @@ export default function Dashboard() {
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [moveItems, setMoveItems] = useState([]);
   const [showNewFolderModal, setShowNewFolderModal] = useState(false);
+  const [downloadingFileId, setDownloadingFileId] = useState(null);
   const lastClickedIndexRef = useRef(null);
 
   const { data: foldersData } = useQuery({
@@ -195,17 +198,26 @@ export default function Dashboard() {
   };
 
   const handleBulkDownload = async () => {
+    if (selectedFileIds.length === 0) return;
+    toast.success('Download started');
+    const promises = [];
     for (const id of selectedFileIds) {
       const file = displayFiles.find((f) => f.id === id);
-      if (file) {
-        try {
-          await filesApi.download(id, file.original_name);
-        } catch (err) {
-          toast.error(err.message);
-        }
-      }
+      if (!file) continue;
+      const downloadId = crypto.randomUUID?.() || `${Date.now()}-${id}`;
+      addDownload(downloadId, file.original_name);
+      const onProgress = (p, speed, loaded, total) => updateProgress(downloadId, p, speed, loaded, total);
+      promises.push(
+        filesApi.download(id, file.original_name, onProgress).then(
+          () => setDone(downloadId),
+          (err) => {
+            setError(downloadId, err.message || 'Download failed');
+            toast.error(err.message);
+          }
+        )
+      );
     }
-    if (selectedFileIds.length > 0) toast.success('Download started');
+    await Promise.all(promises);
   };
 
   const handleDropOnFolder = useCallback(
@@ -354,13 +366,23 @@ export default function Dashboard() {
             }
           }}
           onDownloadFile={async (file) => {
+            const downloadId = crypto.randomUUID?.() || `${Date.now()}`;
+            addDownload(downloadId, file.original_name);
+            toast.success('Download started');
+            setDownloadingFileId(file.id);
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            const onProgress = (p, speed, loaded, total) => updateProgress(downloadId, p, speed, loaded, total);
             try {
-              await filesApi.download(file.id, file.original_name);
-              toast.success('Download started');
+              await filesApi.download(file.id, file.original_name, onProgress);
+              setDone(downloadId);
             } catch (err) {
+              setError(downloadId, err.message || 'Download failed');
               toast.error(err.message || 'Download failed');
+            } finally {
+              setDownloadingFileId(null);
             }
           }}
+          downloadingFileId={downloadingFileId}
           onRename={(item) => {
             setRenameItem(item);
             setRenameType(item.original_name != null ? 'file' : 'folder');

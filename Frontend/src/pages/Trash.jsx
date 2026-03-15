@@ -6,6 +6,7 @@ import ConfirmModal from '../components/ConfirmModal';
 import { filesApi } from '../services/axios';
 import { useFiles } from '../hooks/useFiles';
 import { useToast } from '../context/ToastContext';
+import { useDownload } from '../context/DownloadContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { FolderInput, Trash2, X } from 'lucide-react';
@@ -14,11 +15,13 @@ export default function Trash() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { t } = useLanguage();
+  const { addDownload, updateProgress, setDone, setError } = useDownload();
   const { refreshUser } = useAuth();
   const [deleteConfirm, setDeleteConfirm] = useState({ open: false, fileId: null });
   const [emptyConfirm, setEmptyConfirm] = useState(false);
   const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [downloadingFileId, setDownloadingFileId] = useState(null);
   const lastClickedIndexRef = useRef(null);
 
   const { files, refetch } = useFiles(null, true);
@@ -210,13 +213,23 @@ export default function Trash() {
           onRestore={handleRestore}
           onDeletePermanent={openDeleteConfirm}
           onDownloadFile={async (file) => {
+            const downloadId = crypto.randomUUID?.() || `${Date.now()}`;
+            addDownload(downloadId, file.original_name);
+            toast.success('Download started');
+            setDownloadingFileId(file.id);
+            await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+            const onProgress = (p, speed, loaded, total) => updateProgress(downloadId, p, speed, loaded, total);
             try {
-              await filesApi.download(file.id, file.original_name);
-              toast.success('Download started');
+              await filesApi.download(file.id, file.original_name, onProgress);
+              setDone(downloadId);
             } catch (err) {
+              setError(downloadId, err.message || 'Download failed');
               toast.error(err.message || 'Download failed');
+            } finally {
+              setDownloadingFileId(null);
             }
           }}
+          downloadingFileId={downloadingFileId}
           onDelete={refetch}
           emptyMessage="Trash is empty."
         />
